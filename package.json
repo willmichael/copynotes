@@ -19,9 +19,13 @@
     {
       "name": "copy-notes",
       "title": "Copy Notes",
-      "subtitle": "copy your notes",
-      "description": "Formatting for your copy bin",
-      "mode": "no-view"
+      "subtitle": "View recent clipboard items",
+      "description": "Display the last 5 items from your clipboard history",
+      "mode": "view",
+      "hotkey": {
+        "modifiers": ["cmd", "shift"],
+        "key": "k"
+      }
     }
   ],
   "dependencies": {
