@@ -4,17 +4,28 @@ import {
   Action,
   Clipboard,
   Icon,
-  getSelectedText,
   useNavigation,
   Form,
   LocalStorage,
   showToast,
   Toast,
+  confirmAlert,
+  Alert,
 } from "@raycast/api";
 import { useEffect, useState } from "react";
 
 const BUCKET_COUNT = 5;
 const STORAGE_KEY = "copy-notes-buckets";
+const HISTORY_KEY = "copy-notes-history";
+
+async function loadHistory(): Promise<string[]> {
+  const stored = await LocalStorage.getItem<string>(HISTORY_KEY);
+  return stored ? JSON.parse(stored) : [];
+}
+
+async function saveHistory(history: string[]): Promise<void> {
+  await LocalStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+}
 
 interface Bucket {
   id: number;
@@ -89,46 +100,136 @@ function BucketNameForm({
 function BucketItemsView({
   bucket,
   onRemove,
+  onDelete,
 }: {
   bucket: Bucket;
   onRemove: (text: string) => void;
+  onDelete: (text: string) => void;
 }) {
+  const [items, setItems] = useState<string[]>(bucket.items);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [selectionMode, setSelectionMode] = useState(false);
+
+  function toggleSelection(text: string) {
+    setSelected((prev) =>
+      prev.includes(text) ? prev.filter((t) => t !== text) : [...prev, text]
+    );
+  }
+
+  function enterSelectionMode(text: string) {
+    setSelectionMode(true);
+    setSelected([text]);
+  }
+
+  function exitSelectionMode() {
+    setSelectionMode(false);
+    setSelected([]);
+  }
+
+  async function pasteSelected() {
+    const joined = selected.join("\n");
+    await Clipboard.paste(joined);
+    setSelected([]);
+    setSelectionMode(false);
+    await showToast({ style: Toast.Style.Success, title: `Pasted ${selected.length} items` });
+  }
+
+  function handleRemove(text: string) {
+    setItems((prev) => prev.filter((i) => i !== text));
+    setSelected((prev) => prev.filter((i) => i !== text));
+    onRemove(text);
+  }
+
+  function handleDelete(text: string) {
+    setItems((prev) => prev.filter((i) => i !== text));
+    setSelected((prev) => prev.filter((i) => i !== text));
+    onDelete(text);
+  }
+
   return (
-    <List navigationTitle={bucket.name} searchBarPlaceholder="Type a number to jump...">
-      {bucket.items.map((text, i) => (
-        <List.Item
-          key={i}
-          icon={Icon.Clipboard}
-          title={`${i + 1}. ${text.replace(/\n/g, " ").trim()}`}
-          keywords={[String(i + 1)]}
-          actions={
-            <ActionPanel>
-              <Action
-                title="Paste"
-                icon={Icon.Clipboard}
-                onAction={async () => {
-                  await Clipboard.paste(text);
-                  await showToast({ style: Toast.Style.Success, title: "Pasted" });
-                }}
-              />
-              <Action
-                title="Copy"
-                icon={Icon.CopyClipboard}
-                onAction={async () => {
-                  await Clipboard.copy(text);
-                  await showToast({ style: Toast.Style.Success, title: "Copied" });
-                }}
-              />
-              <Action
-                title="Remove from Bucket"
-                icon={Icon.Trash}
-                style={Action.Style.Destructive}
-                onAction={() => onRemove(text)}
-              />
-            </ActionPanel>
-          }
-        />
-      ))}
+    <List
+      navigationTitle={bucket.name}
+      searchBarPlaceholder={selectionMode ? `Selection mode — ${selected.length} selected` : "Type a number to jump..."}
+    >
+      {items.map((text, i) => {
+        const isSelected = selected.includes(text);
+        const selectionIndex = selected.indexOf(text);
+
+        const copyAndDeleteActions = (
+          <>
+            <Action
+              title="Copy"
+              icon={Icon.CopyClipboard}
+              onAction={async () => {
+                await Clipboard.copy(text);
+                await showToast({ style: Toast.Style.Success, title: "Copied" });
+              }}
+            />
+            <Action
+              title="Remove from Bucket"
+              icon={Icon.MinusCircle}
+              onAction={() => handleRemove(text)}
+            />
+            <Action
+              title="Delete Entry"
+              icon={Icon.Trash}
+              style={Action.Style.Destructive}
+              shortcut={{ modifiers: ["cmd"], key: "backspace" }}
+              onAction={() => handleDelete(text)}
+            />
+          </>
+        );
+
+        return (
+          <List.Item
+            key={i}
+            icon={isSelected ? Icon.CheckCircle : Icon.Clipboard}
+            title={`${i + 1}. ${text.replace(/\n/g, " ").trim()}`}
+            keywords={[String(i + 1)]}
+            accessories={isSelected ? [{ tag: String(selectionIndex + 1) }] : []}
+            actions={
+              selectionMode ? (
+                <ActionPanel>
+                  <Action
+                    title={isSelected ? "Deselect" : "Select"}
+                    icon={isSelected ? Icon.CheckCircle : Icon.Circle}
+                    onAction={() => toggleSelection(text)}
+                  />
+                  <Action
+                    title={`Paste ${selected.length} Selected`}
+                    icon={Icon.Clipboard}
+                    onAction={pasteSelected}
+                  />
+                  <Action
+                    title="Exit Selection Mode"
+                    icon={Icon.XMarkCircle}
+                    shortcut={{ modifiers: ["ctrl"], key: "escape" }}
+                    onAction={exitSelectionMode}
+                  />
+                  {copyAndDeleteActions}
+                </ActionPanel>
+              ) : (
+                <ActionPanel>
+                  <Action
+                    title="Paste"
+                    icon={Icon.Clipboard}
+                    onAction={async () => {
+                      await Clipboard.paste(text);
+                      await showToast({ style: Toast.Style.Success, title: "Pasted" });
+                    }}
+                  />
+                  <Action
+                    title="Select"
+                    icon={Icon.Circle}
+                    onAction={() => enterSelectionMode(text)}
+                  />
+                  {copyAndDeleteActions}
+                </ActionPanel>
+              )
+            }
+          />
+        );
+      })}
     </List>
   );
 }
@@ -137,39 +238,54 @@ export default function Command() {
   const [uncategorized, setUncategorized] = useState<string[]>([]);
   const [buckets, setBuckets] = useState<Bucket[]>(defaultBuckets());
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [selectionMode, setSelectionMode] = useState(false);
   const { push } = useNavigation();
 
   function toggleSelection(text: string) {
-    setSelectedItems((prev) => {
-      const next = new Set(prev);
-      next.has(text) ? next.delete(text) : next.add(text);
-      return next;
-    });
+    setSelectedItems((prev) =>
+      prev.includes(text) ? prev.filter((t) => t !== text) : [...prev, text]
+    );
+  }
+
+  function enterSelectionMode(text: string) {
+    setSelectionMode(true);
+    setSelectedItems([text]);
+  }
+
+  function exitSelectionMode() {
+    setSelectionMode(false);
+    setSelectedItems([]);
   }
 
   async function init() {
     setIsLoading(true);
-    try {
-      const selected = await getSelectedText();
-      if (selected) await Clipboard.copy(selected);
-    } catch {
-      // nothing selected
-    }
 
-    const history: string[] = [];
-    for (let offset = 0; offset < 5; offset++) {
+    // Read fresh items from clipboard (API capped at ~5)
+    const fresh: string[] = [];
+    for (let offset = 0; offset < 10; offset++) {
       try {
         const { text } = await Clipboard.read({ offset });
-        if (text) history.push(text);
+        const trimmed = text?.trim();
+        if (trimmed) fresh.push(trimmed);
       } catch {
-        // no item at this offset
+        break;
       }
     }
 
+    // Merge fresh items with persisted history — fresh items go to the front
+    const persisted = await loadHistory();
+    const merged = [...fresh];
+    for (const item of persisted) {
+      if (!merged.includes(item)) merged.push(item);
+    }
+
+    // Persist the merged history
+    await saveHistory(merged);
+
     const storedBuckets = await loadBuckets();
     const bucketed = new Set(storedBuckets.flatMap((b) => b.items));
-    setUncategorized(history.filter((t) => !bucketed.has(t)));
+    setUncategorized(merged.filter((t) => !bucketed.has(t)));
     setBuckets(storedBuckets);
     setIsLoading(false);
   }
@@ -184,6 +300,8 @@ export default function Command() {
     );
     setBuckets(updated);
     setUncategorized((prev) => prev.filter((i) => i !== text));
+    const persisted = await loadHistory();
+    await saveHistory(persisted.filter((i) => i !== text));
     await saveBuckets(updated);
     await showToast({ style: Toast.Style.Success, title: `Moved to "${updated[bucketId].name}"` });
   }
@@ -194,6 +312,8 @@ export default function Command() {
     );
     setBuckets(updated);
     setUncategorized((prev) => prev.filter((i) => i !== text));
+    const persisted = await loadHistory();
+    await saveHistory(persisted.filter((i) => i !== text));
     await saveBuckets(updated);
     await showToast({ style: Toast.Style.Success, title: `Created "${name}" and added item` });
   }
@@ -209,12 +329,12 @@ export default function Command() {
     const texts = [...selectedItems];
     const updated = buckets.map((b) =>
       b.id === bucketId
-        ? { ...b, items: [...texts, ...b.items.filter((i) => !selectedItems.has(i))] }
+        ? { ...b, items: [...texts, ...b.items.filter((i) => !selectedItems.includes(i))] }
         : b
     );
     setBuckets(updated);
-    setUncategorized((prev) => prev.filter((i) => !selectedItems.has(i)));
-    setSelectedItems(new Set());
+    setUncategorized((prev) => prev.filter((i) => !selectedItems.includes(i)));
+    setSelectedItems([]);
     await saveBuckets(updated);
     await showToast({
       style: Toast.Style.Success,
@@ -226,12 +346,12 @@ export default function Command() {
     const texts = [...selectedItems];
     const updated = buckets.map((b) =>
       b.id === bucketId
-        ? { ...b, name, items: [...texts, ...b.items.filter((i) => !selectedItems.has(i))] }
+        ? { ...b, name, items: [...texts, ...b.items.filter((i) => !selectedItems.includes(i))] }
         : b
     );
     setBuckets(updated);
-    setUncategorized((prev) => prev.filter((i) => !selectedItems.has(i)));
-    setSelectedItems(new Set());
+    setUncategorized((prev) => prev.filter((i) => !selectedItems.includes(i)));
+    setSelectedItems([]);
     await saveBuckets(updated);
     await showToast({
       style: Toast.Style.Success,
@@ -249,11 +369,52 @@ export default function Command() {
     await showToast({ style: Toast.Style.Success, title: "Moved back to Recent" });
   }
 
+  async function deleteEntry(text: string) {
+    const confirmed = await confirmAlert({
+      title: "Delete Entry",
+      message: truncate(text, 80),
+      primaryAction: { title: "Delete", style: Alert.ActionStyle.Destructive },
+    });
+    if (!confirmed) return;
+    setUncategorized((prev) => prev.filter((i) => i !== text));
+    const persisted = await loadHistory();
+    await saveHistory(persisted.filter((i) => i !== text));
+    await showToast({ style: Toast.Style.Success, title: "Entry deleted" });
+  }
+
+  async function deleteBucket(bucketId: number) {
+    const bucket = buckets.find((b) => b.id === bucketId);
+    const confirmed = await confirmAlert({
+      title: `Delete "${bucket?.name}" Bucket`,
+      message: `This will permanently delete the bucket and all ${bucket?.items.length} item${bucket?.items.length !== 1 ? "s" : ""} inside it.`,
+      primaryAction: { title: "Delete", style: Alert.ActionStyle.Destructive },
+    });
+    if (!confirmed) return;
+    const updated = buckets.map((b) =>
+      b.id === bucketId ? { ...b, name: "", items: [] } : b
+    );
+    setBuckets(updated);
+    await saveBuckets(updated);
+    await showToast({ style: Toast.Style.Success, title: `"${bucket?.name}" deleted` });
+  }
+
+  async function deleteEntryFromBucket(text: string, bucketId: number) {
+    const updated = buckets.map((b) =>
+      b.id === bucketId ? { ...b, items: b.items.filter((i) => i !== text) } : b
+    );
+    setBuckets(updated);
+    const persisted = await loadHistory();
+    await saveHistory(persisted.filter((i) => i !== text));
+    await saveBuckets(updated);
+    await showToast({ style: Toast.Style.Success, title: "Entry deleted" });
+  }
+
   function openBucket(bucket: Bucket) {
     push(
       <BucketItemsView
         bucket={bucket}
         onRemove={(text) => removeFromBucket(text, bucket.id)}
+        onDelete={(text) => deleteEntryFromBucket(text, bucket.id)}
       />
     );
   }
@@ -289,7 +450,7 @@ export default function Command() {
   function getBulkMoveActions() {
     const namedBuckets = buckets.filter((b) => b.name);
     const nextEmptyBucket = buckets.find((b) => !b.name);
-    const count = selectedItems.size;
+    const count = selectedItems.length;
 
     return [
       ...namedBuckets.map((bucket) => (
@@ -317,29 +478,83 @@ export default function Command() {
     ];
   }
 
+  async function pasteSelected() {
+    const joined = selectedItems.join("\n");
+    await Clipboard.paste(joined);
+    setSelectedItems([]);
+    await showToast({
+      style: Toast.Style.Success,
+      title: `Pasted ${selectedItems.length} items`,
+    });
+  }
+
   function clipboardItemActions(text: string) {
-    const isSelected = selectedItems.has(text);
-    const hasSelections = selectedItems.size > 0;
+    const isSelected = selectedItems.includes(text);
+    const moveBucketSubmenu = selectedItems.length > 0 ? (
+      <ActionPanel.Submenu
+        title={`Move ${selectedItems.length} Selected to Bucket`}
+        icon={Icon.Folder}
+        shortcut={{ modifiers: ["cmd"], key: "arrowRight" }}
+      >
+        {getBulkMoveActions()}
+      </ActionPanel.Submenu>
+    ) : (
+      <ActionPanel.Submenu
+        title="Move to Bucket"
+        icon={Icon.Folder}
+        shortcut={{ modifiers: ["cmd"], key: "arrowRight" }}
+      >
+        {getMoveActions(text)}
+      </ActionPanel.Submenu>
+    );
+
+    const copyAndDeleteActions = (
+      <>
+        <Action
+          title="Copy"
+          icon={Icon.CopyClipboard}
+          onAction={async () => {
+            await Clipboard.copy(text);
+            await showToast({ style: Toast.Style.Success, title: "Copied" });
+          }}
+        />
+        <Action
+          title="Delete Entry"
+          icon={Icon.Trash}
+          style={Action.Style.Destructive}
+          shortcut={{ modifiers: ["cmd"], key: "backspace" }}
+          onAction={() => deleteEntry(text)}
+        />
+      </>
+    );
+
+    if (selectionMode) {
+      return (
+        <ActionPanel>
+          <Action
+            title={isSelected ? "Deselect" : "Select"}
+            icon={isSelected ? Icon.CheckCircle : Icon.Circle}
+            onAction={() => toggleSelection(text)}
+          />
+          <Action
+            title={`Paste ${selectedItems.length} Selected`}
+            icon={Icon.Clipboard}
+            onAction={pasteSelected}
+          />
+          {moveBucketSubmenu}
+          <Action
+            title="Exit Selection Mode"
+            icon={Icon.XMarkCircle}
+            shortcut={{ modifiers: ["ctrl"], key: "escape" }}
+            onAction={exitSelectionMode}
+          />
+          {copyAndDeleteActions}
+        </ActionPanel>
+      );
+    }
 
     return (
       <ActionPanel>
-        <Action
-          title={isSelected ? "Deselect" : "Select"}
-          icon={isSelected ? Icon.CheckCircle : Icon.Circle}
-          shortcut={{ modifiers: ["opt"], key: "space" }}
-          onAction={() => toggleSelection(text)}
-        />
-        {hasSelections && (
-          <ActionPanel.Submenu
-            title={`Move ${selectedItems.size} Selected to Bucket`}
-            icon={Icon.Folder}
-          >
-            {getBulkMoveActions()}
-          </ActionPanel.Submenu>
-        )}
-        <ActionPanel.Submenu title="Move to Bucket" icon={Icon.Folder}>
-          {getMoveActions(text)}
-        </ActionPanel.Submenu>
         <Action
           title="Paste"
           icon={Icon.Clipboard}
@@ -349,19 +564,22 @@ export default function Command() {
           }}
         />
         <Action
-          title="Copy"
-          icon={Icon.CopyClipboard}
-          onAction={async () => {
-            await Clipboard.copy(text);
-            await showToast({ style: Toast.Style.Success, title: "Copied" });
-          }}
+          title="Select"
+          icon={Icon.Circle}
+          onAction={() => enterSelectionMode(text)}
         />
+        {moveBucketSubmenu}
+        {copyAndDeleteActions}
       </ActionPanel>
     );
   }
 
   return (
-    <List isLoading={isLoading} searchBarPlaceholder="Search..." isShowingDetail>
+    <List
+      isLoading={isLoading}
+      searchBarPlaceholder={selectionMode ? `Selection mode — ${selectedItems.length} selected` : "Search..."}
+      isShowingDetail
+    >
       <List.Section title="Latest Copied">
         {uncategorized.length === 0 && !isLoading && (
           <List.Item id="empty-recent" title="No uncategorized items" icon={Icon.CheckCircle} />
@@ -370,8 +588,9 @@ export default function Command() {
           <List.Item
             key={`uncategorized-${i}`}
             id={`uncategorized-${i}`}
-            icon={selectedItems.has(text) ? Icon.CheckCircle : Icon.Clipboard}
+            icon={selectedItems.includes(text) ? Icon.CheckCircle : Icon.Clipboard}
             title={truncate(text)}
+            accessories={selectedItems.includes(text) ? [{ tag: String(selectedItems.indexOf(text) + 1) }] : []}
             detail={<List.Item.Detail markdown={text} />}
             actions={clipboardItemActions(text)}
           />
@@ -409,6 +628,13 @@ export default function Command() {
                       )
                     }
                   />
+                  <Action
+                    title="Delete Bucket"
+                    icon={Icon.Trash}
+                    style={Action.Style.Destructive}
+                    shortcut={{ modifiers: ["cmd"], key: "backspace" }}
+                    onAction={() => deleteBucket(bucket.id)}
+                  />
                 </ActionPanel>
               }
             />
@@ -421,9 +647,10 @@ export default function Command() {
             <List.Item
               key={`older-${i}`}
               id={`older-${i}`}
-              icon={selectedItems.has(text) ? Icon.CheckCircle : Icon.Clipboard}
+              icon={selectedItems.includes(text) ? Icon.CheckCircle : Icon.Clipboard}
               title={truncate(text)}
               subtitle={`${i + 1} ago`}
+              accessories={selectedItems.includes(text) ? [{ tag: String(selectedItems.indexOf(text) + 1) }] : []}
               detail={<List.Item.Detail markdown={text} />}
               actions={clipboardItemActions(text)}
             />
