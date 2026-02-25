@@ -56,18 +56,10 @@ function truncate(text: string, max = 60): string {
 
 function bucketMarkdown(bucket: Bucket): string {
   if (bucket.items.length === 0) return "_Empty_";
-  return bucket.items
-    .map((item, i) => `**${i + 1}.** ${item.replace(/\n/g, " ").trim()}`)
-    .join("\n\n");
+  return bucket.items.map((item, i) => `**${i + 1}.** ${item.replace(/\n/g, " ").trim()}`).join("\n\n");
 }
 
-function BucketNameForm({
-  initialName,
-  onSubmit,
-}: {
-  initialName?: string;
-  onSubmit: (name: string) => void;
-}) {
+function BucketNameForm({ initialName, onSubmit }: { initialName?: string; onSubmit: (name: string) => void }) {
   const { pop } = useNavigation();
   return (
     <Form
@@ -111,9 +103,7 @@ function BucketItemsView({
   const [selectionMode, setSelectionMode] = useState(false);
 
   function toggleSelection(text: string) {
-    setSelected((prev) =>
-      prev.includes(text) ? prev.filter((t) => t !== text) : [...prev, text]
-    );
+    setSelected((prev) => (prev.includes(text) ? prev.filter((t) => t !== text) : [...prev, text]));
   }
 
   function enterSelectionMode(text: string) {
@@ -165,11 +155,7 @@ function BucketItemsView({
                 await showToast({ style: Toast.Style.Success, title: "Copied" });
               }}
             />
-            <Action
-              title="Remove from Bucket"
-              icon={Icon.MinusCircle}
-              onAction={() => handleRemove(text)}
-            />
+            <Action title="Remove from Bucket" icon={Icon.MinusCircle} onAction={() => handleRemove(text)} />
             <Action
               title="Delete Entry"
               icon={Icon.Trash}
@@ -195,11 +181,7 @@ function BucketItemsView({
                     icon={isSelected ? Icon.CheckCircle : Icon.Circle}
                     onAction={() => toggleSelection(text)}
                   />
-                  <Action
-                    title={`Paste ${selected.length} Selected`}
-                    icon={Icon.Clipboard}
-                    onAction={pasteSelected}
-                  />
+                  <Action title={`Paste ${selected.length} Selected`} icon={Icon.Clipboard} onAction={pasteSelected} />
                   <Action
                     title="Exit Selection Mode"
                     icon={Icon.XMarkCircle}
@@ -218,11 +200,7 @@ function BucketItemsView({
                       await showToast({ style: Toast.Style.Success, title: "Pasted" });
                     }}
                   />
-                  <Action
-                    title="Select"
-                    icon={Icon.Circle}
-                    onAction={() => enterSelectionMode(text)}
-                  />
+                  <Action title="Select" icon={Icon.Circle} onAction={() => enterSelectionMode(text)} />
                   {copyAndDeleteActions}
                 </ActionPanel>
               )
@@ -243,9 +221,7 @@ export default function Command() {
   const { push } = useNavigation();
 
   function toggleSelection(text: string) {
-    setSelectedItems((prev) =>
-      prev.includes(text) ? prev.filter((t) => t !== text) : [...prev, text]
-    );
+    setSelectedItems((prev) => (prev.includes(text) ? prev.filter((t) => t !== text) : [...prev, text]));
   }
 
   function enterSelectionMode(text: string) {
@@ -296,7 +272,7 @@ export default function Command() {
 
   async function moveToExistingBucket(text: string, bucketId: number) {
     const updated = buckets.map((b) =>
-      b.id === bucketId ? { ...b, items: [text, ...b.items.filter((i) => i !== text)] } : b
+      b.id === bucketId ? { ...b, items: [text, ...b.items.filter((i) => i !== text)] } : b,
     );
     setBuckets(updated);
     setUncategorized((prev) => prev.filter((i) => i !== text));
@@ -308,7 +284,7 @@ export default function Command() {
 
   async function moveToNewBucket(text: string, bucketId: number, name: string) {
     const updated = buckets.map((b) =>
-      b.id === bucketId ? { ...b, name, items: [text, ...b.items.filter((i) => i !== text)] } : b
+      b.id === bucketId ? { ...b, name, items: [text, ...b.items.filter((i) => i !== text)] } : b,
     );
     setBuckets(updated);
     setUncategorized((prev) => prev.filter((i) => i !== text));
@@ -328,9 +304,7 @@ export default function Command() {
   async function moveBulkToExistingBucket(bucketId: number) {
     const texts = [...selectedItems];
     const updated = buckets.map((b) =>
-      b.id === bucketId
-        ? { ...b, items: [...texts, ...b.items.filter((i) => !selectedItems.includes(i))] }
-        : b
+      b.id === bucketId ? { ...b, items: [...texts, ...b.items.filter((i) => !selectedItems.includes(i))] } : b,
     );
     setBuckets(updated);
     setUncategorized((prev) => prev.filter((i) => !selectedItems.includes(i)));
@@ -345,9 +319,7 @@ export default function Command() {
   async function moveBulkToNewBucket(bucketId: number, name: string) {
     const texts = [...selectedItems];
     const updated = buckets.map((b) =>
-      b.id === bucketId
-        ? { ...b, name, items: [...texts, ...b.items.filter((i) => !selectedItems.includes(i))] }
-        : b
+      b.id === bucketId ? { ...b, name, items: [...texts, ...b.items.filter((i) => !selectedItems.includes(i))] } : b,
     );
     setBuckets(updated);
     setUncategorized((prev) => prev.filter((i) => !selectedItems.includes(i)));
@@ -360,9 +332,7 @@ export default function Command() {
   }
 
   async function removeFromBucket(text: string, bucketId: number) {
-    const updated = buckets.map((b) =>
-      b.id === bucketId ? { ...b, items: b.items.filter((i) => i !== text) } : b
-    );
+    const updated = buckets.map((b) => (b.id === bucketId ? { ...b, items: b.items.filter((i) => i !== text) } : b));
     setBuckets(updated);
     setUncategorized((prev) => [text, ...prev]);
     await saveBuckets(updated);
@@ -390,18 +360,14 @@ export default function Command() {
       primaryAction: { title: "Delete", style: Alert.ActionStyle.Destructive },
     });
     if (!confirmed) return;
-    const updated = buckets.map((b) =>
-      b.id === bucketId ? { ...b, name: "", items: [] } : b
-    );
+    const updated = buckets.map((b) => (b.id === bucketId ? { ...b, name: "", items: [] } : b));
     setBuckets(updated);
     await saveBuckets(updated);
     await showToast({ style: Toast.Style.Success, title: `"${bucket?.name}" deleted` });
   }
 
   async function deleteEntryFromBucket(text: string, bucketId: number) {
-    const updated = buckets.map((b) =>
-      b.id === bucketId ? { ...b, items: b.items.filter((i) => i !== text) } : b
-    );
+    const updated = buckets.map((b) => (b.id === bucketId ? { ...b, items: b.items.filter((i) => i !== text) } : b));
     setBuckets(updated);
     const persisted = await loadHistory();
     await saveHistory(persisted.filter((i) => i !== text));
@@ -415,7 +381,7 @@ export default function Command() {
         bucket={bucket}
         onRemove={(text) => removeFromBucket(text, bucket.id)}
         onDelete={(text) => deleteEntryFromBucket(text, bucket.id)}
-      />
+      />,
     );
   }
 
@@ -437,11 +403,7 @@ export default function Command() {
           key="new"
           title="New Bucket"
           icon={Icon.FolderAdd}
-          onAction={() =>
-            push(
-              <BucketNameForm onSubmit={(name) => moveToNewBucket(text, nextEmptyBucket.id, name)} />
-            )
-          }
+          onAction={() => push(<BucketNameForm onSubmit={(name) => moveToNewBucket(text, nextEmptyBucket.id, name)} />)}
         />
       ) : null,
     ];
@@ -450,8 +412,6 @@ export default function Command() {
   function getBulkMoveActions() {
     const namedBuckets = buckets.filter((b) => b.name);
     const nextEmptyBucket = buckets.find((b) => !b.name);
-    const count = selectedItems.length;
-
     return [
       ...namedBuckets.map((bucket) => (
         <Action
@@ -466,13 +426,7 @@ export default function Command() {
           key="new"
           title="New Bucket"
           icon={Icon.FolderAdd}
-          onAction={() =>
-            push(
-              <BucketNameForm
-                onSubmit={(name) => moveBulkToNewBucket(nextEmptyBucket.id, name)}
-              />
-            )
-          }
+          onAction={() => push(<BucketNameForm onSubmit={(name) => moveBulkToNewBucket(nextEmptyBucket.id, name)} />)}
         />
       ) : null,
     ];
@@ -490,23 +444,24 @@ export default function Command() {
 
   function clipboardItemActions(text: string) {
     const isSelected = selectedItems.includes(text);
-    const moveBucketSubmenu = selectedItems.length > 0 ? (
-      <ActionPanel.Submenu
-        title={`Move ${selectedItems.length} Selected to Bucket`}
-        icon={Icon.Folder}
-        shortcut={{ modifiers: ["cmd"], key: "arrowRight" }}
-      >
-        {getBulkMoveActions()}
-      </ActionPanel.Submenu>
-    ) : (
-      <ActionPanel.Submenu
-        title="Move to Bucket"
-        icon={Icon.Folder}
-        shortcut={{ modifiers: ["cmd"], key: "arrowRight" }}
-      >
-        {getMoveActions(text)}
-      </ActionPanel.Submenu>
-    );
+    const moveBucketSubmenu =
+      selectedItems.length > 0 ? (
+        <ActionPanel.Submenu
+          title={`Move ${selectedItems.length} Selected to Bucket`}
+          icon={Icon.Folder}
+          shortcut={{ modifiers: ["cmd"], key: "arrowRight" }}
+        >
+          {getBulkMoveActions()}
+        </ActionPanel.Submenu>
+      ) : (
+        <ActionPanel.Submenu
+          title="Move to Bucket"
+          icon={Icon.Folder}
+          shortcut={{ modifiers: ["cmd"], key: "arrowRight" }}
+        >
+          {getMoveActions(text)}
+        </ActionPanel.Submenu>
+      );
 
     const copyAndDeleteActions = (
       <>
@@ -536,11 +491,7 @@ export default function Command() {
             icon={isSelected ? Icon.CheckCircle : Icon.Circle}
             onAction={() => toggleSelection(text)}
           />
-          <Action
-            title={`Paste ${selectedItems.length} Selected`}
-            icon={Icon.Clipboard}
-            onAction={pasteSelected}
-          />
+          <Action title={`Paste ${selectedItems.length} Selected`} icon={Icon.Clipboard} onAction={pasteSelected} />
           {moveBucketSubmenu}
           <Action
             title="Exit Selection Mode"
@@ -563,11 +514,7 @@ export default function Command() {
             await showToast({ style: Toast.Style.Success, title: "Pasted" });
           }}
         />
-        <Action
-          title="Select"
-          icon={Icon.Circle}
-          onAction={() => enterSelectionMode(text)}
-        />
+        <Action title="Select" icon={Icon.Circle} onAction={() => enterSelectionMode(text)} />
         {moveBucketSubmenu}
         {copyAndDeleteActions}
       </ActionPanel>
@@ -611,20 +558,13 @@ export default function Command() {
               detail={<List.Item.Detail markdown={bucketMarkdown(bucket)} />}
               actions={
                 <ActionPanel>
-                  <Action
-                    title="Open Bucket"
-                    icon={Icon.ArrowRight}
-                    onAction={() => openBucket(bucket)}
-                  />
+                  <Action title="Open Bucket" icon={Icon.ArrowRight} onAction={() => openBucket(bucket)} />
                   <Action
                     title="Rename Bucket"
                     icon={Icon.Pencil}
                     onAction={() =>
                       push(
-                        <BucketNameForm
-                          initialName={bucket.name}
-                          onSubmit={(name) => renameBucket(bucket.id, name)}
-                        />
+                        <BucketNameForm initialName={bucket.name} onSubmit={(name) => renameBucket(bucket.id, name)} />,
                       )
                     }
                   />
